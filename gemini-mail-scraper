@@ -84,6 +84,6 @@ for link in links:
             print(f'Date: {email["Date"]}')
             print(f'Subject: {subject}')
             for url in urls:
-                url = url.rstrip('.,])"\r\n\'')
+                url = url.rstrip('.,])"\r\n\'>')
                 print(f'=>{url}')
             print('')
