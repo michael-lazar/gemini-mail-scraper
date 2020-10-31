@@ -29,6 +29,7 @@ import argparse
 import re
 import mailbox
 import tempfile
+from datetime import datetime, timezone
 
 import requests
 import lxml.html
@@ -53,6 +54,12 @@ resp.raise_for_status()
 
 matches = lxml.html.fromstring(resp.content).xpath('//a/@href')
 links = [str(m) for m in matches if str(m).endswith((".txt", ".txt.gz"))]
+
+print("Gemini URLs scraped from the mailing list archive")
+print("=>https://github.com/michael-lazar/gemini-mail-scraper")
+print("")
+print(f"Generated {datetime.now(timezone.utc).isoformat()}")
+print("")
 
 for link in links:
     url = os.path.join(args.archive_url, link)
