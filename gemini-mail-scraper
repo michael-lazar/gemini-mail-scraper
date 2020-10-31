@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""
+Download a list of gemini URLs from the mailing list archives, and dump a
+formatted text/gemini document with the URLs + metadata to stdout.
+
+Copyright 2020 Michael Lazar
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+import gzip
+import os
+import argparse
+import re
+import mailbox
+import tempfile
+
+import requests
+import lxml.html
+
+
+# https://urlregex.com/
+RE_URL = re.compile(
+    'gemini://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|'
+    '[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+)
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '--archive-url',
+    help='The http URL of the pipermail archive page',
+    default='https://lists.orbitalfox.eu/archives/gemini/',
+)
+args = parser.parse_args()
+
+resp = requests.get(args.archive_url)
+resp.raise_for_status()
+
+matches = lxml.html.fromstring(resp.content).xpath('//a/@href')
+links = [str(m) for m in matches if str(m).endswith((".txt", ".txt.gz"))]
+
+for link in links:
+    url = os.path.join(args.archive_url, link)
+    resp = requests.get(url)
+    resp.raise_for_status()
+
+    if link.endswith('.gz'):
+        mbox_data = gzip.decompress(resp.content)
+    else:
+        mbox_data = resp.content
+
+    with tempfile.NamedTemporaryFile('wb') as fp:
+        fp.write(mbox_data)
+        mbox = mailbox.mbox(fp.name, create=False)
+        for email in reversed(mbox):
+            urls = RE_URL.findall(email.as_string())
+            if not urls:
+                continue
+
+            subject = ' '.join(email['Subject'].splitlines(keepends=False))
+            print(f'From: {email["From"]}')
+            print(f'Date: {email["Date"]}')
+            print(f'Subject: {subject}')
+            for url in urls:
+                url = url.rstrip('.,])"\r\n\'')
+                print(f'=>{url}')
+            print('')
